@@ -21,8 +21,9 @@ declare( strict_types = 1 );
 namespace MWParsoid\Rest\Handler;
 
 use LogicException;
+use MediaWiki\MediaWikiServices;
 use MediaWiki\Rest\Handler;
-use MediaWiki\Rest\Handler\ParsoidFormatHelper;
+use MediaWiki\Rest\Handler\Helper\ParsoidFormatHelper;
 use MediaWiki\Rest\RequestInterface;
 use MediaWiki\Rest\Response;
 use MediaWiki\Rest\ResponseFactory;
@@ -92,7 +93,8 @@ trait EndpointRedirectTrait {
 		//        server and protocol ($wgInternalServer) if the endpoint was invoked
 		//        as a private endpoint. See T311867.
 		global $wgRestPath;
-		$path = wfExpandUrl( "$wgRestPath$path", PROTO_CURRENT );
+		$urlUtils = MediaWikiServices::getInstance()->getUrlUtils();
+		$path = $urlUtils->expand( "$wgRestPath$path", PROTO_CURRENT );
 		foreach ( $pathParams as $param => $value ) {
 			// NOTE: we use rawurlencode here, since execute() uses rawurldecode().
 			// Spaces in path params must be encoded to %20 (not +).

@@ -72,7 +72,6 @@ class LintLogger {
 		foreach ( $lints as &$lint ) {
 			$dsr = &$lint['dsr'];
 			if ( ( $dsr[2] ?? 0 ) > 1 ) { // widths 0,1,null are fine
-				// @phan-suppress-next-line PhanPluginDuplicateExpressionAssignmentOperation; consistency
 				$dsr[2] = $dsr[2] - $dsr[0];
 			}
 			if ( ( $dsr[3] ?? 0 ) > 1 ) { // widths 0,1,null are fine
@@ -97,13 +96,6 @@ class LintLogger {
 			return;
 		}
 
-		$pageConfig = $env->getPageConfig();
-
-		// Skip linting if we cannot lint it
-		if ( !$pageConfig->hasLintableContentModel() ) {
-			return;
-		}
-
 		$linting = $env->getSiteConfig()->linting();
 		$enabledBuffer = null;
 
@@ -123,7 +115,7 @@ class LintLogger {
 			self::convertDSROffsets( $env, $enabledBuffer, $offsetType, 'ucs2' );
 		}
 
-		$env->getDataAccess()->logLinterData( $pageConfig, $enabledBuffer );
+		$env->getDataAccess()->logLinterData( $env->getPageConfig(), $enabledBuffer );
 	}
 
 }

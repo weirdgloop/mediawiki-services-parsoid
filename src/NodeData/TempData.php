@@ -34,6 +34,9 @@ use Wikimedia\Parsoid\Tokens\SourceRange;
  *
  * Used to shuttle tokens to the end of a stage in the TTM
  * @property array|null $shuttleTokens
+ *
+ * Used to indicate that media dimensions have redundant units
+ * @property bool|null $bogusPx
  */
 #[\AllowDynamicProperties]
 class TempData {
@@ -118,7 +121,7 @@ class TempData {
 	 *
 	 * @var array|null
 	 */
-	private $tagData;
+	private ?array $tagData;
 
 	/**
 	 * Check whether a bit is set in $this->bits
@@ -126,8 +129,8 @@ class TempData {
 	 * @param int $flag
 	 * @return bool
 	 */
-	public function getFlag( $flag ) {
-		return $this->bits & $flag;
+	public function getFlag( int $flag ): bool {
+		return (bool)( $this->bits & $flag );
 	}
 
 	/**
@@ -136,7 +139,7 @@ class TempData {
 	 * @param int $flag
 	 * @param bool $value
 	 */
-	public function setFlag( $flag, $value = true ) {
+	public function setFlag( int $flag, bool $value = true ): void {
 		if ( $value ) {
 			$this->bits |= $flag;
 		} else {
@@ -152,6 +155,9 @@ class TempData {
 	 * @return void
 	 */
 	public function setTagData( string $key, $data ) {
+		if ( !isset( $this->tagData ) ) {
+			$this->tagData = [];
+		}
 		$this->tagData[$key] = $data;
 	}
 
@@ -162,6 +168,6 @@ class TempData {
 	 * @return mixed
 	 */
 	public function getTagData( string $key ) {
-		return $this->tagData[$key];
+		return $this->tagData[$key] ?? null;
 	}
 }

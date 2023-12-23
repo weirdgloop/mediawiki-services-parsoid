@@ -154,7 +154,7 @@ class LinkHandlerUtils {
 				$contentString .= $child->nodeValue;
 			} elseif ( DOMUtils::hasTypeOf( $child, 'mw:DisplaySpace' ) ) {
 				$contentString .= ' ';
-			} elseif ( DOMUtils::isDiffMarker( $child ) ) {
+			} elseif ( DiffUtils::isDiffMarker( $child ) ) {
 			} else {
 				return null;
 			}
@@ -230,8 +230,9 @@ class LinkHandlerUtils {
 
 		// Check if the link content has been modified or is newly inserted content.
 		// FIXME: This will only work with selser of course. Hard to test without selser.
-		if ( $state->inModifiedContent ||
-			DiffUtils::hasDiffMark( $node, $env, 'subtree-changed' )
+		if (
+			$state->inModifiedContent ||
+			DiffUtils::hasDiffMark( $node, DiffMarkers::SUBTREE_CHANGED )
 		) {
 			$rtData->contentModified = true;
 		}
@@ -287,16 +288,32 @@ class LinkHandlerUtils {
 
 		// Check if the href matches any of our interwiki URL patterns
 		$interwikiMatch = $siteConfig->interwikiMatcher( $href );
-		if ( $interwikiMatch &&
+		if ( !$interwikiMatch ) {
+			return $rtData;
+		}
+
+		$iw = $siteConfig->interwikiMapNoNamespaces()[ltrim( $interwikiMatch[0], ':' )];
+		$localInterwiki = !empty( $iw['local'] );
+
+		// Only to be used in question mark check, since other checks want to include the fragment
+		$targetForQmarkCheck = $interwikiMatch[1];
+		// FIXME: If ever the default value for $wgExternalInterwikiFragmentMode
+		// changes, we can reduce this by always stripping off the fragment
+		// identifier, since in "html5" mode, that isn't encoded.  At present,
+		// we can only do that if we know it's a local interwiki link.
+		if ( $localInterwiki ) {
+			$withoutFragment = strstr( $targetForQmarkCheck, '#', true );
+			if ( $withoutFragment !== false ) {
+				$targetForQmarkCheck = $withoutFragment;
+			}
+		}
+
+		if (
 			// Question mark is a valid title char, so it won't fail the test below,
 			// but gets percent encoded on the way out since it has special
 			// semantics in a url.  That will break the url we're serializing, so
 			// protect it.
-			// FIXME: If ever the default value for $wgExternalInterwikiFragmentMode
-			// changes, we can reduce this by always stripping off the fragment
-			// identifier, since in "html5" mode, that isn't encoded.  At present,
-			// we can only do that if we know it's a local interwiki link.
-			strpos( $interwikiMatch[1], '?' ) === false &&
+			strpos( $targetForQmarkCheck, '?' ) === false &&
 			// Ensure we have a valid link target, otherwise falling back to extlink
 			// is preferable, since it won't serialize as a link.
 			(
@@ -437,7 +454,10 @@ class LinkHandlerUtils {
 		Env $env, string $linkTarget, stdClass $linkData
 	): string {
 		$linkTitle = $env->makeTitleFromText( $linkTarget );
-		if ( ( $linkTitle->getNamespace()->isCategory() || $linkTitle->getNamespace()->isFile() ) &&
+		$categoryNs = $env->getSiteConfig()->canonicalNamespaceId( 'category' );
+		$fileNs = $env->getSiteConfig()->canonicalNamespaceId( 'file' );
+
+		if ( ( $linkTitle->getNamespaceId() === $categoryNs || $linkTitle->getNamespaceId() === $fileNs ) &&
 			$linkData->type === 'mw:WikiLink' &&
 			$linkTarget[0] !== ':' ) {
 			// Escape category and file links
@@ -893,7 +913,7 @@ class LinkHandlerUtils {
 				$state->emitChunk( new MagicLinkText( $serialized, $node ), $node );
 			}
 			return;
-		} else { // There is an interwiki for RFCs, but strangely none for PMIDs.
+		} else {
 			// serialize as auto-numbered external link
 			// [http://example.com]
 			$linktext = null;
@@ -917,7 +937,7 @@ class LinkHandlerUtils {
 	 * @param Element $node
 	 */
 	public static function linkHandler( SerializerState $state, Element $node ): void {
-		// TODO: handle internal/external links etc using RDFa and dataAttribs
+		// TODO: handle internal/external links etc using RDFa and dataParsoid
 		// Also convert unannotated html links without advanced attributes to
 		// external wiki links for html import. Might want to consider converting
 		// relative links without path component and file extension to wiki links.

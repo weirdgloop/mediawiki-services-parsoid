@@ -52,12 +52,6 @@ class TokenStreamPatcher extends TokenHandler {
 	private $discardableNlTk = null;
 
 	/**
-	 * @var TemplateHandler
-	 * A local instance needed to process magic words
-	 */
-	private $templateHandler;
-
-	/**
 	 * @param TokenTransformManager $manager
 	 * @param array $options
 	 */
@@ -65,7 +59,6 @@ class TokenStreamPatcher extends TokenHandler {
 		$newOptions = [ 'tsp' => true ] + $options;
 		parent::__construct( $manager, $newOptions );
 		$this->tokenizer = new PegTokenizer( $this->env );
-		$this->templateHandler = new TemplateHandler( $manager, $options );
 		$this->reset();
 	}
 
@@ -96,7 +89,7 @@ class TokenStreamPatcher extends TokenHandler {
 				return PHPUtils::jsonEncode( $token );
 			}
 		);
-		$this->srcOffset = $token->dataAttribs->tsr->end ?? null;
+		$this->srcOffset = $token->dataParsoid->tsr->end ?? null;
 		if ( $this->sol && $this->tplStartToken ) {
 			// When using core preprocessor, start-of-line start is forced by
 			// inserting a newline in certain cases (the "T2529 hack").  In the
@@ -157,7 +150,7 @@ class TokenStreamPatcher extends TokenHandler {
 	 * @return array
 	 */
 	private function convertTokenToString( Token $token ): array {
-		$da = $token->dataAttribs;
+		$da = $token->dataParsoid;
 		$tsr = $da->tsr ?? null;
 
 		if ( $tsr && $tsr->end > $tsr->start ) {
@@ -343,17 +336,17 @@ class TokenStreamPatcher extends TokenHandler {
 			case 'CommentTk':
 				// Comments don't change SOL state
 				// Update srcOffset
-				$this->srcOffset = $token->dataAttribs->tsr->end ?? null;
+				$this->srcOffset = $token->dataParsoid->tsr->end ?? null;
 				break;
 
 			case 'SelfclosingTagTk':
-				if ( $token->getName() === 'meta' && ( $token->dataAttribs->stx ?? '' ) !== 'html' ) {
+				if ( $token->getName() === 'meta' && ( $token->dataParsoid->stx ?? '' ) !== 'html' ) {
 					if ( TokenUtils::hasTypeOf( $token, 'mw:Transclusion' ) &&
-						$token->dataAttribs->tmp->tplarginfo->func === null // Not a parser-func
+						$token->dataParsoid->tmp->tplarginfo->func === null // Not a parser-func
 					) {
 						$this->tplStartToken = $token;
 					}
-					$this->srcOffset = $token->dataAttribs->tsr->end ?? null;
+					$this->srcOffset = $token->dataParsoid->tsr->end ?? null;
 					if ( count( $this->tokenBuf ) > 0 &&
 						TokenUtils::hasTypeOf( $token, 'mw:Transclusion' )
 					) {

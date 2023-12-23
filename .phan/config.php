@@ -6,15 +6,13 @@
 # is set in your environment and points to an up-to-date copy of mediawiki-core
 $STANDALONE = isset( $GLOBALS['ParsoidPhanStandalone'] );
 
-$cfg = require __DIR__ . '/../vendor/mediawiki/mediawiki-phan-config/src/config.php';
-
-$cfg['target_php_version'] = '7.2';
-$cfg['enable_class_alias_support'] = true; // should be on by default: T224704
-
 $root = realpath( __DIR__ . DIRECTORY_SEPARATOR . '..' );
 $hasLangConv = is_dir( "{$root}/vendor/wikimedia/langconv" );
 
 if ( $STANDALONE ) {
+	$cfg = require __DIR__ . '/../vendor/mediawiki/mediawiki-phan-config/src/config-library.php';
+	$cfg['target_php_version'] = '8.1';
+
 	$cfg['directory_list'] = [
 		# not the extension directory, it requires MW (ie, "not standalone")
 		'src',
@@ -23,7 +21,10 @@ if ( $STANDALONE ) {
 		'vendor',
 		'.phan/stubs',
 	];
+	$cfg['suppress_issue_types'][] = 'PhanAccessMethodInternal';
 } else {
+	$cfg = require __DIR__ . '/../vendor/mediawiki/mediawiki-phan-config/src/config.php';
+
 	$cfg['directory_list'] = array_merge( $cfg['directory_list'], [
 		# 'src' and '.phan/stubs' are already included by default
 		'extension',
@@ -54,11 +55,15 @@ if ( $STANDALONE ) {
 	}
 }
 
+$cfg['minimum_target_php_version'] = '7.4';
+
 // If the optional wikimedia/langconv package isn't installed, ignore files
 // which require it.
 if ( !$hasLangConv ) {
 	$cfg['exclude_analysis_directory_list'][] = 'src/Language/';
 }
+
+$cfg['enable_class_alias_support'] = true; // should be on by default: T224704
 
 /**
  * Quick implementation of a recursive directory list.
@@ -109,12 +114,19 @@ if ( $STANDALONE ) {
 		wfCollectPhpFiles( "{$VP}/vendor/wikimedia/langconv", $cfg['exclude_file_list'] );
 	}
 }
+wfCollectPhpFiles( "vendor/composer/composer", $cfg['exclude_file_list'] );
 wfCollectPhpFiles( "vendor/php-parallel-lint/php-parallel-lint", $cfg['exclude_file_list'] );
 
 // Exclude src/DOM in favour of .phan/stubs/DomImpl.php
 wfCollectPhpFiles( 'src/DOM', $cfg['exclude_file_list'] );
 
 // By default mediawiki-phan-config ignores the 'use of deprecated <foo>' errors.
+// Re-enable these errors.
+$cfg['suppress_issue_types'] = array_filter( $cfg['suppress_issue_types'], static function ( $issue ) {
+	return !str_starts_with( $issue, 'PhanDeprecated' );
+} );
+
+// Add your own customizations here if needed.
 // $cfg['suppress_issue_types'][] = '<some phan issue>';
 
 // Exclude peg-generated output
@@ -125,9 +137,8 @@ $cfg['exclude_file_list'][] = "src/ParserTests/Grammar.php";
 $cfg['suppress_issue_types'][] = 'PhanTypeArraySuspiciousNullable';
 $cfg['suppress_issue_types'][] = 'PhanTypePossiblyInvalidDimOffset';
 
-// These are too spammy for now. TODO enable
+// This is too spammy for now. TODO enable
 $cfg['null_casts_as_any_type'] = true;
-$cfg['scalar_implicit_cast'] = true;
 
 // Bundled plugins, generated from,
 // `ls -p1 vendor/phan/phan/.phan/plugins/ |grep -Ev "(/|README)" |sed -e s/\.php// |xargs printf "\t\'%s\',\n"`

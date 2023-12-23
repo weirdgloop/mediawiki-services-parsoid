@@ -14,7 +14,6 @@ use Wikimedia\Parsoid\NodeData\TempData;
 use Wikimedia\Parsoid\Utils\DOMCompat;
 use Wikimedia\Parsoid\Utils\DOMDataUtils;
 use Wikimedia\Parsoid\Utils\DOMUtils;
-use Wikimedia\Parsoid\Wikitext\Consts;
 use Wikimedia\Parsoid\Wt2Html\Wt2HtmlDOMProcessor;
 
 class PWrap implements Wt2HtmlDOMProcessor {
@@ -59,13 +58,14 @@ class PWrap implements Wt2HtmlDOMProcessor {
 	 * @return bool
 	 */
 	public static function pWrapOptional( Node $n ): bool {
-		return ( $n instanceof Text && preg_match( '/^\s*$/D', $n->nodeValue ) ) ||
-			$n instanceof Comment ||
-			isset( Consts::$HTML['MetaDataTags'][DOMCompat::nodeName( $n )] ) ||
+		return $n instanceof Comment ||
+			( $n instanceof Text && preg_match( '/^\s*$/D', $n->nodeValue ) ) ||
 			(
 				$n instanceof Element &&
-				DOMDataUtils::getDataParsoid( $n )->getTempFlag( TempData::WRAPPER ) &&
-				self::pWrapOptionalChildren( $n )
+				( DOMUtils::isMetaDataTag( $n ) || (
+					DOMDataUtils::getDataParsoid( $n )->getTempFlag( TempData::WRAPPER ) &&
+					self::pWrapOptionalChildren( $n )
+				) )
 			);
 	}
 
@@ -116,11 +116,7 @@ class PWrap implements Wt2HtmlDOMProcessor {
 				$dp = DOMDataUtils::getDataParsoid( $ret[$i]['node'] );
 				$dp->autoInsertedEnd = true;
 				unset( $dp->tmp->endTSR );
-				$cnode = $n->cloneNode();
-				'@phan-var Element $cnode'; // @var Element $cnode
-				if ( $n->hasAttribute( DOMDataUtils::DATA_OBJECT_ATTR_NAME ) ) {
-					DOMDataUtils::setNodeData( $cnode, DOMDataUtils::getNodeData( $n )->clone() );
-				}
+				$cnode = DOMDataUtils::cloneNode( $n, false );
 				$ret[] = [ 'pwrap' => $v['pwrap'], 'node' => $cnode ];
 				$i++;
 				DOMDataUtils::getDataParsoid( $ret[$i]['node'] )->autoInsertedStart = true;

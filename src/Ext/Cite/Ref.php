@@ -3,6 +3,7 @@ declare( strict_types = 1 );
 
 namespace Wikimedia\Parsoid\Ext\Cite;
 
+use Closure;
 use Exception;
 use Wikimedia\Parsoid\DOM\DocumentFragment;
 use Wikimedia\Parsoid\DOM\Element;
@@ -32,11 +33,10 @@ class Ref extends ExtensionTagHandler {
 		// function.  However, we're overly permissive here since we can't
 		// distinguish when that's nested in another template.
 		// The php preprocessor did our expansion.
-		$allowNestedRef = !empty( $extApi->inTemplate() ) && $parentExtTag !== 'ref';
+		$allowNestedRef = !empty( $extApi->inTemplate() );
 
 		return $extApi->extTagToDOM(
 			$extArgs,
-			'',
 			$txt,
 			[
 				// NOTE: sup's content model requires it only contain phrasing
@@ -56,14 +56,24 @@ class Ref extends ExtensionTagHandler {
 	}
 
 	/** @inheritDoc */
+	public function processAttributeEmbeddedHTML(
+		ParsoidExtensionAPI $extApi, Element $elt, Closure $proc
+	): void {
+		$dataMw = DOMDataUtils::getDataMw( $elt );
+		if ( isset( $dataMw->body->html ) ) {
+			$dataMw->body->html = $proc( $dataMw->body->html );
+		}
+	}
+
+	/** @inheritDoc */
 	public function lintHandler(
 		ParsoidExtensionAPI $extApi, Element $ref, callable $defaultHandler
 	): ?Node {
 		$dataMw = DOMDataUtils::getDataMw( $ref );
-		if ( is_string( $dataMw->body->html ?? null ) ) {
+		if ( isset( $dataMw->body->html ) ) {
 			$fragment = $extApi->htmlToDom( $dataMw->body->html );
 			$defaultHandler( $fragment );
-		} elseif ( is_string( $dataMw->body->id ?? null ) ) {
+		} elseif ( isset( $dataMw->body->id ) ) {
 			$refNode = DOMCompat::getElementById( $extApi->getTopLevelDoc(), $dataMw->body->id );
 			if ( $refNode ) {
 				$defaultHandler( $refNode );
@@ -89,10 +99,10 @@ class Ref extends ExtensionTagHandler {
 			'inPHPBlock' => true
 		];
 
-		if ( is_string( $dataMw->body->html ?? null ) ) {
+		if ( isset( $dataMw->body->html ) ) {
 			// First look for the extension's content in data-mw.body.html
 			$src = $extApi->htmlToWikitext( $html2wtOpts, $dataMw->body->html );
-		} elseif ( is_string( $dataMw->body->id ?? null ) ) {
+		} elseif ( isset( $dataMw->body->id ) ) {
 			// If the body isn't contained in data-mw.body.html, look if
 			// there's an element pointed to by body->id.
 			$bodyElt = DOMCompat::getElementById( $extApi->getTopLevelDoc(), $dataMw->body->id );
@@ -155,7 +165,7 @@ class Ref extends ExtensionTagHandler {
 				if ( $hasRefName ) {
 					// Follow content may have been added as spans, so drop it
 					if ( DOMCompat::querySelector( $bodyElt, "span[typeof~='mw:Cite/Follow']" ) ) {
-						$bodyElt = $bodyElt->cloneNode( true );
+						$bodyElt = DOMDataUtils::cloneNode( $bodyElt, true );
 						foreach ( $bodyElt->childNodes as $child ) {
 							if ( DOMUtils::hasTypeOf( $child, 'mw:Cite/Follow' ) ) {
 								// @phan-suppress-next-line PhanTypeMismatchArgumentSuperType

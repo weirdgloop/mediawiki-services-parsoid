@@ -1,11 +1,14 @@
 {
 	"root": true,
+	"env": {
+		"mocha": true
+	},
 	"extends": [
 		"wikimedia/server",
 		"wikimedia/jsdoc"
 	],
 	"parserOptions": {
-		"ecmaVersion": 2017
+		"ecmaVersion": 2018
 	},
 	"rules": {
 		"indent": [
@@ -94,7 +97,8 @@
 		"no-shadow": "off",
 		"node/no-missing-require": "off",
 		"jsdoc/require-asterisk-prefix": "warn",
-		"unicorn/prefer-string-slice": "warn"
+		"unicorn/prefer-string-slice": "warn",
+		"es-x/no-hashbang": "warn"
 	},
 	"overrides": [
 		{

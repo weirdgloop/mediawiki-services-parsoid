@@ -3,6 +3,7 @@ declare( strict_types = 1 );
 
 namespace Wikimedia\Parsoid\Ext\Cite;
 
+use Closure;
 use stdClass;
 use Wikimedia\Parsoid\Core\DomSourceRange;
 use Wikimedia\Parsoid\DOM\DocumentFragment;
@@ -14,6 +15,7 @@ use Wikimedia\Parsoid\Ext\ExtensionTagHandler;
 use Wikimedia\Parsoid\Ext\ParsoidExtensionAPI;
 use Wikimedia\Parsoid\Ext\PHPUtils;
 use Wikimedia\Parsoid\Ext\WTUtils;
+use Wikimedia\Parsoid\NodeData\DataMw;
 use Wikimedia\Parsoid\NodeData\DataParsoid;
 use Wikimedia\Parsoid\Utils\DOMCompat;
 
@@ -39,19 +41,6 @@ class References extends ExtensionTagHandler {
 	}
 
 	/**
-	 * It should be sufficient to only include styles when we're rendering
-	 * a references tag.
-	 *
-	 * @return array
-	 */
-	private static function getModuleStyles(): array {
-		return [
-			'ext.cite.style',
-			'ext.cite.styles'
-		];
-	}
-
-	/**
 	 * @param ParsoidExtensionAPI $extApi
 	 * @param DocumentFragment $domFragment
 	 * @param array $refsOpts
@@ -72,10 +61,10 @@ class References extends ExtensionTagHandler {
 		DOMUtils::migrateChildren( $domFragment, $ol );
 
 		// Support the `responsive` parameter
-		$rrOpts = $extApi->getSiteConfig()->responsiveReferences();
-		$responsiveWrap = !empty( $rrOpts['enabled'] );
 		if ( $refsOpts['responsive'] !== null ) {
 			$responsiveWrap = $refsOpts['responsive'] !== '0';
+		} else {
+			$responsiveWrap = (bool)$extApi->getSiteConfig()->getMWConfigValue( 'CiteResponsiveReferences' );
 		}
 
 		if ( $responsiveWrap ) {
@@ -93,10 +82,10 @@ class References extends ExtensionTagHandler {
 				'typeof' => 'mw:Extension/references',
 				'about' => $extApi->newAboutId()
 			] );
-			$dataMw = (object)[
+			$dataMw = new DataMw( [
 				'name' => 'references',
 				'attrs' => new stdClass
-			];
+			] );
 			// Dont emit empty keys
 			if ( $refsOpts['group'] ) {
 				$dataMw->attrs->group = $refsOpts['group'];
@@ -113,7 +102,11 @@ class References extends ExtensionTagHandler {
 			$modifyDp( $dp );
 		}
 
-		$extApi->addModuleStyles( self::getModuleStyles() );
+		// These module namess are copied from Cite extension.
+		// They are hardcoded there as well.
+		$metadata = $extApi->getMetadata();
+		$metadata->addModules( [ 'ext.cite.ux-enhancements' ] );
+		$metadata->addModuleStyles( [ 'ext.cite.parsoid.styles', 'ext.cite.styles' ] );
 
 		return $frag;
 	}
@@ -561,11 +554,11 @@ class References extends ExtensionTagHandler {
 
 		// Deal with responsive wrapper
 		if ( DOMCompat::getClassList( $refsNode )->contains( 'mw-references-wrap' ) ) {
-			$rrOpts = $extApi->getSiteConfig()->responsiveReferences();
 			// NOTE: The default Cite implementation hardcodes this threshold to 10.
 			// We use a configurable parameter here primarily for test coverage purposes.
 			// See citeParserTests.txt where we set a threshold of 1 or 2.
-			if ( $refGroup && count( $refGroup->refs ) > $rrOpts['threshold'] ) {
+			$rrThreshold = $extApi->getSiteConfig()->getMWConfigValue( 'CiteResponsiveReferencesThreshold' ) ?? 10;
+			if ( $refGroup && count( $refGroup->refs ) > $rrThreshold ) {
 				DOMCompat::getClassList( $refsNode )->add( 'mw-references-columns' );
 			}
 			$refsNode = $refsNode->firstChild;
@@ -678,7 +671,7 @@ class References extends ExtensionTagHandler {
 				} else {
 					$refsData->pushEmbeddedContentFlag();
 					// Look for <ref>s embedded in data attributes
-					$extApi->processHTMLHiddenInDataAttributes( $child,
+					$extApi->processAttributeEmbeddedHTML( $child,
 						function ( string $html ) use ( $extApi, $refsData ) {
 							return self::processEmbeddedRefs( $extApi, $refsData, $html );
 						}
@@ -719,7 +712,7 @@ class References extends ExtensionTagHandler {
 		};
 		$processBodyHtml = static function ( Element $n ) use ( $processEmbeddedErrors ) {
 			$dataMw = DOMDataUtils::getDataMw( $n );
-			if ( is_string( $dataMw->body->html ?? null ) ) {
+			if ( isset( $dataMw->body->html ) ) {
 				$dataMw->body->html = $processEmbeddedErrors(
 					$dataMw->body->html
 				);
@@ -739,7 +732,7 @@ class References extends ExtensionTagHandler {
 				} elseif ( DOMUtils::hasTypeOf( $child, 'mw:Extension/references' ) ) {
 					$processBodyHtml( $child );
 				} else {
-					$extApi->processHTMLHiddenInDataAttributes(
+					$extApi->processAttributeEmbeddedHTML(
 						$child, $processEmbeddedErrors
 					);
 				}
@@ -757,10 +750,8 @@ class References extends ExtensionTagHandler {
 	): DocumentFragment {
 		$domFragment = $extApi->extTagToDOM(
 			$extArgs,
-			'',
 			$txt,
 			[
-				'wrapperTag' => 'div',
 				'parseOpts' => [ 'extTag' => 'references' ],
 			]
 		);
@@ -797,6 +788,16 @@ class References extends ExtensionTagHandler {
 	}
 
 	/** @inheritDoc */
+	public function processAttributeEmbeddedHTML(
+		ParsoidExtensionAPI $extApi, Element $elt, Closure $proc
+	): void {
+		$dataMw = DOMDataUtils::getDataMw( $elt );
+		if ( isset( $dataMw->body->html ) ) {
+			$dataMw->body->html = $proc( $dataMw->body->html );
+		}
+	}
+
+	/** @inheritDoc */
 	public function domToWikitext(
 		ParsoidExtensionAPI $extApi, Element $node, bool $wrapperUnmodified
 	) {
@@ -814,7 +815,7 @@ class References extends ExtensionTagHandler {
 			if ( empty( $dataMw->body ) ) {
 				return $startTagSrc; // We self-closed this already.
 			} else {
-				if ( is_string( $dataMw->body->html ) ) {
+				if ( isset( $dataMw->body->html ) ) {
 					$src = $extApi->htmlToWikitext(
 						[ 'extName' => $dataMw->name ],
 						$dataMw->body->html
@@ -835,7 +836,7 @@ class References extends ExtensionTagHandler {
 		ParsoidExtensionAPI $extApi, Element $refs, callable $defaultHandler
 	): ?Node {
 		$dataMw = DOMDataUtils::getDataMw( $refs );
-		if ( is_string( $dataMw->body->html ?? null ) ) {
+		if ( isset( $dataMw->body->html ) ) {
 			$fragment = $extApi->htmlToDom( $dataMw->body->html );
 			$defaultHandler( $fragment );
 		}
