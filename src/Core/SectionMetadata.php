@@ -212,12 +212,14 @@ class SectionMetadata implements \JsonSerializable {
 	 *   Setting a value to null is equivalent to removing the value.
 	 */
 	public function setExtensionData( string $key, $value ): void {
+		/* WGL - DiscussionTools interacts with the parser cache and extension data in an order dependent way that breaks with deferred parser cache saving, so disable this exception.
 		if (
 			array_key_exists( $key, $this->extensionData ) &&
 			$this->extensionData[$key] !== $value
 		) {
 			throw new \InvalidArgumentException( "Conflicting data for $key" );
 		}
+		*/
 		if ( $value === null ) {
 			unset( $this->extensionData[$key] );
 		} else {
